@@ -1,8 +1,12 @@
 import click
+import os
 from datetime import timedelta
+import dotenv
+from google.oauth2 import service_account
+import json
 import pandas as pd
 import requests
-
+dotenv.load_dotenv()
 
 STOPS = {
     "Rennes": "87471003"
@@ -36,7 +40,28 @@ def run(token, date, ville):
     trains["is_delayed"] = trains["delay"].astype(int) != 0
 
     trains.to_csv(f"{date.strftime('%Y-%m-%d')}_{ville}.csv", index=False) 
+    
+    # mettre dans BigQuery
+    projectId = 'ensai-2023-373710'
+    datasetId = 'alanna_sncf'
+    tableId = 'trains'
+    destination_table = datasetId + "." + tableId
 
+    service_account_info = os.getenv("SERVICE_ACCOUNT_INFO")
+    credentials = service_account.Credentials.from_service_account_info(
+        json.loads(service_account_info)
+    )
+    
+    columns = ["direction", "network", "name", "headsign", "label", "arrival_date_time", "base_arrival_date_time",
+    "departure_date_time", "base_departure_date_time", "delay", "is_delayed"]
+    
+    trains[columns].astype(str).to_gbq(
+        destination_table=destination_table,
+        project_id=projectId,
+        credentials=credentials,
+        location='eu',
+        if_exists='replace'
+    )
 
 if __name__ == '__main__':
     run()
